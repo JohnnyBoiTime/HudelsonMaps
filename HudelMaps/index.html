@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Pullman Graph Builder</title>
+
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+    #map {
+      width: 100%;
+      height: 100vh;
+    }
+    #panel {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: white;
+      padding: 8px 10px;
+      border-radius: 4px;
+      font-family: sans-serif;
+      font-size: 13px;
+      z-index: 1000;
+      max-width: 260px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+    }
+    button {
+      margin: 2px 4px 2px 0;
+      font-size: 12px;
+    }
+    .small {
+      font-size: 11px;
+      color: #555;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="panel">
+    <div><strong>Pullman Graph Builder</strong></div>
+    <div id="info">Click on the map to add nodes. Each click adds a node and an edge from the previous node.</div>
+    <div style="margin-top: 6px;">
+      <button id="resetBtn">Reset graph</button>
+      <button id="downloadBtn">Download graph JSON</button>
+    </div>
+    <div class="small">
+      Nodes and edges are stored in memory and exported as a JSON graph:
+      <code>{ nodes: [...], edges: [...] }</code>
+    </div>
+  </div>
+  <div id="map"></div>
+
+  <!-- Leaflet JS -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <script>
+    // Center roughly on Pullman, WA
+    const map = L.map('map').setView([46.731, -117.165], 14);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    const infoDiv = document.getElementById('info');
+    const resetBtn = document.getElementById('resetBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    // Our graph structure
+    // nodes: [{ id, lat, lng }]
+    // edges: [{ from, to, distanceMeters }]
+    let nodes = [];
+    let edges = [];
+
+    // Leaflet layers for visualization
+    let markers = [];
+    let lines = [];
+
+    function updateInfo() {
+      infoDiv.textContent = `Nodes: ${nodes.length}, Edges: ${edges.length}. ` +
+        `Click on the map to add another node.`;
+    }
+
+    function resetGraph() {
+      nodes = [];
+      edges = [];
+
+      markers.forEach(m => map.removeLayer(m));
+      lines.forEach(l => map.removeLayer(l));
+      markers = [];
+      lines = [];
+
+      updateInfo();
+    }
+
+    function downloadGraph() {
+      const graph = {
+        nodes: nodes,
+        edges: edges
+      };
+
+      const jsonStr = JSON.stringify(graph, null, 2);
+
+      // Create a blob and trigger a download
+      const blob = new Blob([jsonStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "pullman_graph.json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    resetBtn.addEventListener('click', resetGraph);
+    downloadBtn.addEventListener('click', downloadGraph);
+
+    // Handle clicks: add nodes + edges
+    map.on('click', function (e) {
+      const latlng = e.latlng;
+      const id = nodes.length; // simple incremental ID
+
+      // Add node to graph
+      const node = {
+        id: id,
+        lat: latlng.lat,
+        lng: latlng.lng
+      };
+      nodes.push(node);
+
+      // Marker for visualization
+      const marker = L.marker(latlng)
+        .addTo(map)
+        .bindPopup(`Node ${id}<br>Lat: ${latlng.lat.toFixed(5)}<br>Lng: ${latlng.lng.toFixed(5)}`);
+      markers.push(marker);
+
+      // If not the first node, create an edge from previous node
+      if (nodes.length > 1) {
+        const prevNode = nodes[nodes.length - 2];
+        const prevLatLng = L.latLng(prevNode.lat, prevNode.lng);
+        const distanceMeters = prevLatLng.distanceTo(latlng);
+
+        const edge = {
+          from: prevNode.id,
+          to: node.id,
+          distanceMeters: distanceMeters
+        };
+        edges.push(edge);
+
+        // Draw line between them
+        const line = L.polyline(
+          [
+            [prevNode.lat, prevNode.lng],
+            [node.lat, node.lng]
+          ],
+          { weight: 4 }
+        ).addTo(map);
+        lines.push(line);
+      }
+
+      updateInfo();
+    });
+
+    // Initial info
+    updateInfo();
+  </script>
+</body>
+</html>
