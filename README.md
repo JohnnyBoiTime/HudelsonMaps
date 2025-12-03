@@ -8,3 +8,5 @@ Have it so you can have multiple paths to a destination from a starting point to
 Make it so a single node can have several outgoing edges
 Saving graphs as JSON
 Dijkstras algorithm
+
+Hdfksahdkijsadjkadsjad SUCKER
