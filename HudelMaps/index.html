@@ -108,12 +108,14 @@
     function resetGraph() {
       nodes = [];
       edges = [];
-      totalDistanceWalked = 0;
+      totalDistanceWalkedMeters = 0;
+      totalWalkingTimeInMinutes = 0;
 
       markers.forEach(m => map.removeLayer(m));
       lines.forEach(l => map.removeLayer(l));
       markers = [];
       lines = [];
+
 
       updateInfo();
     }
