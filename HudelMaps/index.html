@@ -97,7 +97,7 @@
 
     function updateInfo() {
       const totalDistanceInKM = (totalDistanceWalkedMeters / 1000);
-      const totalTimeWalkingInMinutes = ((totalDistanceWalkedMeters / walkSpeedOfNormalHumanBeing)) / 60 * 1.5;
+      const totalTimeWalkingInMinutes = ((totalDistanceWalkedMeters / walkSpeedOfNormalHumanBeing)) / 60 * 1.5; // 1.5 factor for turns to make it more in line with google maps
       infoDiv.textContent = `Nodes: ${nodes.length} \n, 
       Edges: ${edges.length}.\n` + 
       `Total distance to destinaton: ${totalDistanceWalkedMeters.toFixed(2)}m \n` + 
