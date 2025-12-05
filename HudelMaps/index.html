@@ -57,10 +57,6 @@
     <div>
       
     </div>
-    <div class="small">
-      Nodes and edges are stored in memory and exported as a JSON graph:
-      <code>{ nodes: [...], edges: [...] }</code>
-    </div>
   </div>
   <div id="map"></div>
 
@@ -138,11 +134,6 @@
         highlightQuickestPath(resultForPath.path);
 
         updateInfo();
-        alert(
-          `Path from ${startingNode} to ${destinationNode} \n` +
-          `Distance: ${distanceMeters.toFixed(1)} meters \n` +
-          `Estimated walking time: ${timeWalkingInMinutes.toFixed(2)} minutes`
-        );
 
         // Reset so user can find a new destination to and from
         // if needed
