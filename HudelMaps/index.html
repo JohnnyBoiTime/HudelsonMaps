@@ -48,7 +48,7 @@
 <body>
   <div id="panel">
     <div><strong>HudelMaps</strong></div>
-    <div id="info">Click on any two nodes to find out how long the path is, and how long it will take to walk it!!!</div>
+    <div id="info"></div>
     <div style="margin-top: 6px;">
       <input type="file" id="inputFile" accept=".json" style="margin-top:6px;"/> 
       <button id="resetBtn">Reset graph</button>
@@ -323,11 +323,11 @@
         function updateInfo() {
           const totalDistanceInKM = (totalDistanceWalkedMeters / 1000);
           const totalTimeWalkingInMinutes = ((totalDistanceWalkedMeters / walkSpeedOfNormalHumanBeing)) / 60 * 1.5; // 1.5 factor for turns to make it more in line with google maps
-          infoDiv.textContent = `Nodes: ${nodes.length} \n, 
-          Edges: ${edges.length}.\n` + 
-          `Total distance to destinaton: ${distanceMeters.toFixed(2)}m \n` + 
-          `Approximate walk time: ${timeWalkingInMinutes.toFixed(2)} minutes \n` +
-          `Click on the map to add another node.`;
+          infoDiv.innerHTML = `Click on any two markers to see the distance between them and how long it will take to walk between them!<br>` +
+          `Nodes: ${nodes.length} <br>` + 
+          `Edges: ${edges.length}.<br>` + 
+          `Total distance to destinaton: ${distanceMeters.toFixed(2)}m <br>` + 
+          `Approximate walk time: ${timeWalkingInMinutes.toFixed(2)} minutes <br>`
         }
 
         function resetGraph() {
