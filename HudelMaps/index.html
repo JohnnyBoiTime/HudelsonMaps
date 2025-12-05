@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <title>Pullman Graph Builder</title>
 
-
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -51,6 +50,7 @@
     <div><strong>Pullman Graph Builder</strong></div>
     <div id="info">Click on the map to add nodes. Each click adds a node and an edge from the previous node.</div>
     <div style="margin-top: 6px;">
+      <input type="file" id="inputFile" accept=".json" style="margin-top:6px;"/> 
       <button id="resetBtn">Reset graph</button>
       <button id="downloadBtn">Download graph JSON</button>
     </div>
@@ -72,6 +72,75 @@
 
   <script>
     
+function loadGraphFromExistingJson(graph) {
+        
+        // Copy over the JSON's node and edge data
+        nodes = graph.nodes;
+        edges = graph.edges;
+
+        // Clear map data for re-adding new data.
+        // marker = edge
+        // node = line
+        markers.forEach(marker => map.removeLayer(marker));
+        lines.forEach(line => map.removeLayer(line));
+        markers = [];
+        lines = [];
+
+        // Map for quick lookups
+        const findNodeById = new Map();
+        nodes.forEach(node => findNodeById.set(node.id, node));
+
+        // Add nodes and edges from loaded json
+        nodes.forEach(node => {
+          const latLong = L.latLng(node.lat, node.lng);
+          const marker = L.marker(latLong).addTo(map)
+          .bindPopup(`Node ${node.id}<br>Lat: ${node.lat.toFixed(5)}<br>Long: ${node.lng.toFixed(5)}`);
+          markers.push(marker);
+        });
+
+        edges.forEach(edge => {
+          const startNode = findNodeById.get(edge.from);
+          const destinationNode = findNodeById.get(edge.to);
+
+          const distanceMeters = edge.distanceMeters;
+          totalDistanceWalkedMeters += distanceMeters;
+
+          const lineBetweenNodes = L.polyline(
+            [
+              [startNode.lat, startNode.lng],
+              [destinationNode.lat, destinationNode.lng]
+            ],
+            { weight: 4 }
+        ).addTo(map);
+          lines.push(lineBetweenNodes);
+        })
+
+        updateInfo();
+      }
+
+    const inputFile = document.getElementById('inputFile');
+
+    inputFile.addEventListener('change', function(event) {
+      const file = event.target.files[0];
+
+      if (!file) {
+        return;
+      }
+
+      const fileReader = new FileReader();
+      fileReader.onload = function(e) {
+        try {
+          const text = e.target.result;
+          const graphData = JSON.parse(text);
+          loadGraphFromExistingJson(graphData);
+          alert('Loaded graph yay!!!');
+        } catch (error) {
+          alert('Could not parse JSON file:' + error.message);
+        }
+      };
+      fileReader.readAsText(file);
+    });
+
     const map = L.map('map', {
       zoomControl: false
     }).setView([46.731, -117.165], 14);
@@ -153,7 +222,6 @@
         lng: latlng.lng
       };
       nodes.push(node);
-
       
       const marker = L.marker(latlng)
         .addTo(map)
