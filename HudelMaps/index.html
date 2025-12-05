@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <title>Pullman Graph Builder</title>
 
-  <!-- Leaflet CSS -->
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -51,17 +50,16 @@
     <div><strong>Pullman Graph Builder</strong></div>
     <div id="info">Click on the map to add nodes. Each click adds a node and an edge from the previous node.</div>
     <div style="margin-top: 6px;">
+      <input type="file" id="inputFile" accept=".json" style="margin-top:6px;"/> 
       <button id="resetBtn">Reset graph</button>
       <button id="downloadBtn">Download graph JSON</button>
     </div>
-    <div class="small">
-      Nodes and edges are stored in memory and exported as a JSON graph:
-      <code>{ nodes: [...], edges: [...] }</code>
+    <div>
+      
     </div>
   </div>
   <div id="map"></div>
 
-  <!-- Leaflet JS -->
   <script
     src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
@@ -69,117 +67,358 @@
   ></script>
 
   <script>
-    // Center roughly on Pullman, WA
-    const map = L.map('map').setView([46.731, -117.165], 14);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
+    // Will store 2 nodes to create a path between them
+    let selectedPath = [];
+    let highlightSelectedPath = [];
+    let startingNode = 0;
+    let destinationNode = 0;
+    let distanceMeters = 0;
+    let timeWalkingInMinutes = 0;
 
-    const infoDiv = document.getElementById('info');
-    const resetBtn = document.getElementById('resetBtn');
-    const downloadBtn = document.getElementById('downloadBtn');
+    function highlightQuickestPath(path) {
+      
+      // Clear already existing highlights 
+      highlightSelectedPath.forEach(line => map.removeLayer(line));
+      highlightSelectedPath = [];
 
-    // Our graph structure
-    // nodes: [{ id, lat, lng }]
-    // edges: [{ from, to, distanceMeters }]
-    let nodes = [];
-    let edges = [];
+  const idLookup = new Map(nodes.map(node => [node.id, node]));    
 
-    // Leaflet layers for visualization
-    let markers = [];
-    let lines = [];
+      // Draw highlighted path along nodes between the
+      // 2 selected nodes red
+      for (let i = 0; i < path.length - 1; i++) {
+        const startId = path[i];
+        const endId = path[i + 1];
+        const startNode = idLookup.get(startId);
+        const endNode = idLookup.get(endId);
 
-    function updateInfo() {
-      infoDiv.textContent = `Nodes: ${nodes.length}, Edges: ${edges.length}. ` +
-        `Click on the map to add another node.`;
-    }
-
-    function resetGraph() {
-      nodes = [];
-      edges = [];
-
-      markers.forEach(m => map.removeLayer(m));
-      lines.forEach(l => map.removeLayer(l));
-      markers = [];
-      lines = [];
-
-      updateInfo();
-    }
-
-    function downloadGraph() {
-      const graph = {
-        nodes: nodes,
-        edges: edges
-      };
-
-      const jsonStr = JSON.stringify(graph, null, 2);
-
-      // Create a blob and trigger a download
-      const blob = new Blob([jsonStr], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "pullman_graph.json";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }
-
-    resetBtn.addEventListener('click', resetGraph);
-    downloadBtn.addEventListener('click', downloadGraph);
-
-    // Handle clicks: add nodes + edges
-    map.on('click', function (e) {
-      const latlng = e.latlng;
-      const id = nodes.length; // simple incremental ID
-
-      // Add node to graph
-      const node = {
-        id: id,
-        lat: latlng.lat,
-        lng: latlng.lng
-      };
-      nodes.push(node);
-
-      // Marker for visualization
-      const marker = L.marker(latlng)
-        .addTo(map)
-        .bindPopup(`Node ${id}<br>Lat: ${latlng.lat.toFixed(5)}<br>Lng: ${latlng.lng.toFixed(5)}`);
-      markers.push(marker);
-
-      // If not the first node, create an edge from previous node
-      if (nodes.length > 1) {
-        const prevNode = nodes[nodes.length - 2];
-        const prevLatLng = L.latLng(prevNode.lat, prevNode.lng);
-        const distanceMeters = prevLatLng.distanceTo(latlng);
-
-        const edge = {
-          from: prevNode.id,
-          to: node.id,
-          distanceMeters: distanceMeters
-        };
-        edges.push(edge);
-
-        // Draw line between them
         const line = L.polyline(
           [
-            [prevNode.lat, prevNode.lng],
-            [node.lat, node.lng]
+            [startNode.lat, startNode.lng],
+            [endNode.lat, endNode.lng]
           ],
-          { weight: 4 }
+          {
+            color: 'red',
+            weight: 6,
+            opacity: 0.9
+          }
         ).addTo(map);
-        lines.push(line);
+
+        // Make it so it is drawn above the current paths
+        line.bringToFront();
+        highlightSelectedPath.push(line);
       }
 
-      updateInfo();
-    });
+    }
 
-    // Initial info
-    updateInfo();
+    function createPath(node) {
+
+      // Selecting first node
+      if (selectedPath.length == 0) {
+        selectedPath = [node];
+        return;
+      }
+
+      // Selecting second node -> compute path
+      if (selectedPath.length == 1 && selectedPath[0] != node) {
+        selectedPath.push(node);
+        startingNode = selectedPath[0];
+        destinationNode = selectedPath[1];
+        
+        // Compute shortest path
+        const resultForPath = djikstras(startingNode, destinationNode);
+
+        distanceMeters = resultForPath.distance;
+        timeWalkingInMinutes = (distanceMeters / walkSpeedOfNormalHumanBeing) / 60 * 1.5;
+
+        highlightQuickestPath(resultForPath.path);
+
+        updateInfo();
+
+        // Reset so user can find a new destination to and from
+        // if needed
+        selectedPath = [];
+        return;
+
+        // If more than 2 nodew are selected, reset to current node
+      }
+
+       selectedPath = [nodeId];
+    }
+
+    function adjacencyList() {
+      const adjacencyList = new Map();
+
+      nodes.forEach(node => {
+        adjacencyList.set(node.id, []);
+      });
+
+      edges.forEach(edge => {
+        const {from, to, distanceMeters} = edge;
+
+        adjacencyList.get(from).push({to, weight: distanceMeters});
+        adjacencyList.get(to).push({to: from, weight: distanceMeters});
+      })
+
+      return adjacencyList;
+    }
+    
+      // Simple djikstra implementation
+      function djikstras(startingNodeId, endingNodeId) {
+        const adjacency = adjacencyList();
+        const distanceMap = new Map();
+        const previousNodeMap = new Map();
+        const unvisitedNodes = new Set(adjacency.keys());
+
+        unvisitedNodes.forEach(id => distanceMap.set(id, Infinity));
+        distanceMap.set(startingNodeId, 0);
+
+        while (unvisitedNodes.size > 0) {
+          let currentNodeId = null;
+          let currentDistance = Infinity;
+
+          for (const nodeId of unvisitedNodes) {
+            const dist = distanceMap.get(nodeId);
+            if (dist < currentDistance) {
+              currentDistance = dist;
+              currentNodeId = nodeId;
+            }
+          }
+
+          // Unreachable nodes!!!
+          if (currentNodeId == null || currentDistance === Infinity) {
+            break;
+          }
+
+          unvisitedNodes.delete(currentNodeId);
+
+          if (currentNodeId == endingNodeId) {
+            break;
+          }
+          const neighbors = adjacency.get(currentNodeId) || [];
+          neighbors.forEach(({ to, weight}) => {
+            if (!unvisitedNodes.has(to)) {
+              return;
+            }
+            const alternative = currentDistance + weight;
+            if (alternative < distanceMap.get(to)) {
+              distanceMap.set(to, alternative);
+              previousNodeMap.set(to, currentNodeId);
+            }
+          });
+        }
+
+
+      const path = [];
+      let end = endingNodeId;
+      path.push(end);
+      while (end !== startingNodeId) {
+        end = previousNodeMap.get(end);
+        if (end === undefined) {
+          break;
+        }
+
+        path.push(end);
+      }
+      path.reverse();
+
+      return {
+        distance: distanceMap.get(endingNodeId),
+        path: path
+      };
+    }
+
+
+    function loadGraphFromExistingJson(graph) {
+            
+            // Copy over the JSON's node and edge data
+            nodes = graph.nodes;
+            edges = graph.edges;
+
+            // Clear map data for re-adding new data.
+            // marker = edge
+            // node = line
+            markers.forEach(marker => map.removeLayer(marker));
+            lines.forEach(line => map.removeLayer(line));
+            markers = [];
+            lines = [];
+
+            // Map for quick lookups
+            const findNodeById = new Map();
+            nodes.forEach(node => findNodeById.set(node.id, node));
+
+            // Add nodes and edges from JSON, create path by
+            // clicking on 2 nodes
+            nodes.forEach(node => {
+              const latLong = L.latLng(node.lat, node.lng);
+              const marker = L.marker(latLong).addTo(map)
+              .bindPopup(`Node ${node.id}<br>Lat: ${node.lat.toFixed(5)}<br>Long: ${node.lng.toFixed(5)}`);
+              marker.on('click', () => createPath(node.id));
+              markers.push(marker);
+            });
+
+            edges.forEach(edge => {
+              const startNode = findNodeById.get(edge.from);
+              const destinationNode = findNodeById.get(edge.to);
+
+              const distanceMeters = edge.distanceMeters;
+              totalDistanceWalkedMeters += distanceMeters;
+
+              const lineBetweenNodes = L.polyline(
+                [
+                  [startNode.lat, startNode.lng],
+                  [destinationNode.lat, destinationNode.lng]
+                ],
+                { weight: 4 }
+            ).addTo(map);
+              lines.push(lineBetweenNodes);
+            })
+            updateInfo();
+          }
+
+        const inputFile = document.getElementById('inputFile');
+
+        inputFile.addEventListener('change', function(event) {
+          const file = event.target.files[0];
+
+          if (!file) {
+            return;
+          }
+
+          const fileReader = new FileReader();
+          fileReader.onload = function(e) {
+            try {
+              const text = e.target.result;
+              const graphData = JSON.parse(text);
+              loadGraphFromExistingJson(graphData);
+              alert('Loaded graph yay!!!');
+            } catch (error) {
+              alert('Could not parse JSON file:' + error.message);
+            }
+          };
+          fileReader.readAsText(file);
+        });
+
+        const map = L.map('map', {
+          zoomControl: false
+        }).setView([46.731, -117.165], 14);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        const infoDiv = document.getElementById('info');
+        const resetBtn = document.getElementById('resetBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        const walkSpeedOfNormalHumanBeing = 1.4; // 1.4 meters/second
+
+        let nodes = [];
+        let edges = [];
+
+        let markers = [];
+        let lines = [];
+
+        let totalDistanceWalkedMeters = 0; // In meters
+
+        function updateInfo() {
+          const totalDistanceInKM = (totalDistanceWalkedMeters / 1000);
+          const totalTimeWalkingInMinutes = ((totalDistanceWalkedMeters / walkSpeedOfNormalHumanBeing)) / 60 * 1.5; // 1.5 factor for turns to make it more in line with google maps
+          infoDiv.textContent = `Nodes: ${nodes.length} \n, 
+          Edges: ${edges.length}.\n` + 
+          `Total distance to destinaton: ${distanceMeters.toFixed(2)}m \n` + 
+          `Approximate walk time: ${timeWalkingInMinutes.toFixed(2)} minutes \n` +
+          `Click on the map to add another node.`;
+        }
+
+        function resetGraph() {
+          nodes = [];
+          edges = [];
+          totalDistanceWalkedMeters = 0;
+
+          markers.forEach(m => map.removeLayer(m));
+          lines.forEach(l => map.removeLayer(l));
+          markers = [];
+          lines = [];
+
+
+          updateInfo();
+        }
+
+        function downloadGraph() {
+          const graph = {
+            nodes: nodes,
+            edges: edges
+          };
+
+          const jsonStr = JSON.stringify(graph, null, 2);
+
+          // Create a blob and trigger a download
+          const blob = new Blob([jsonStr], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "pullman_graph.json";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }
+
+        resetBtn.addEventListener('click', resetGraph);
+        downloadBtn.addEventListener('click', downloadGraph);
+
+        map.on('click', function (e) {
+          const latlng = e.latlng;
+          const id = nodes.length; 
+
+          const node = {
+            id: id,
+            lat: latlng.lat,
+            lng: latlng.lng
+          };
+          nodes.push(node);
+          
+          const marker = L.marker(latlng)
+            .addTo(map)
+            .bindPopup(`Node ${id}<br>Lat: ${latlng.lat.toFixed(5)}<br>Lng: ${latlng.lng.toFixed(5)}`);
+            marker.on('click', () => createPath(id));
+            markers.push(marker);
+          markers.push(marker);
+
+          if (nodes.length > 1) {
+            const prevNode = nodes[nodes.length - 2];
+            const prevLatLng = L.latLng(prevNode.lat, prevNode.lng);
+            const distanceMeters = prevLatLng.distanceTo(latlng);
+
+            totalDistanceWalkedMeters += distanceMeters;
+
+            const totalWalkingTimeInMinutes = ((distanceMeters / walkSpeedOfNormalHumanBeing) / 60 ) * 1.5;
+
+            const edge = {
+              from: prevNode.id,
+              to: node.id,
+              distanceMeters: distanceMeters,
+              totalWalkingTimeInMinutes: totalWalkingTimeInMinutes
+            };
+            edges.push(edge);
+
+            const line = L.polyline(
+              [
+                [prevNode.lat, prevNode.lng],
+                [node.lat, node.lng]
+              ],
+              { weight: 4 }
+            ).addTo(map);
+            lines.push(line);
+          }
+
+          updateInfo();
+        });
+
+        updateInfo();
   </script>
 </body>
 </html>
