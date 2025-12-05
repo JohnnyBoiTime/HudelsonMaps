@@ -47,15 +47,13 @@
 </head>
 <body>
   <div id="panel">
-    <div><strong>Pullman Graph Builder</strong></div>
-    <div id="info">Click on the map to add nodes. Each click adds a node and an edge from the previous node.</div>
+    <div><strong>HudelMaps</strong></div>
+    <div id="info">Click on any two nodes to find out how long the path is, and how long it will take to walk it!!!</div>
     <div style="margin-top: 6px;">
       <input type="file" id="inputFile" accept=".json" style="margin-top:6px;"/> 
       <button id="resetBtn">Reset graph</button>
-      <button id="downloadBtn">Download graph JSON</button>
     </div>
     <div>
-      
     </div>
   </div>
   <div id="map"></div>
@@ -68,7 +66,7 @@
 
   <script>
 
-    // Will store 2 nodes to create a path between them
+    // Globals for pathfinding and whatnot
     let selectedPath = [];
     let highlightSelectedPath = [];
     let startingNode = 0;
@@ -82,7 +80,7 @@
       highlightSelectedPath.forEach(line => map.removeLayer(line));
       highlightSelectedPath = [];
 
-  const idLookup = new Map(nodes.map(node => [node.id, node]));    
+      const idLookup = new Map(nodes.map(node => [node.id, node]));    
 
       // Draw highlighted path along nodes between the
       // 2 selected nodes red
@@ -140,7 +138,7 @@
         selectedPath = [];
         return;
 
-        // If more than 2 nodew are selected, reset to current node
+        // If more than 2 nodes are selected, reset to current node
       }
 
        selectedPath = [nodeId];
@@ -346,78 +344,7 @@
           updateInfo();
         }
 
-        function downloadGraph() {
-          const graph = {
-            nodes: nodes,
-            edges: edges
-          };
-
-          const jsonStr = JSON.stringify(graph, null, 2);
-
-          // Create a blob and trigger a download
-          const blob = new Blob([jsonStr], { type: "application/json" });
-          const url = URL.createObjectURL(blob);
-
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = "pullman_graph.json";
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }
-
         resetBtn.addEventListener('click', resetGraph);
-        downloadBtn.addEventListener('click', downloadGraph);
-
-        map.on('click', function (e) {
-          const latlng = e.latlng;
-          const id = nodes.length; 
-
-          const node = {
-            id: id,
-            lat: latlng.lat,
-            lng: latlng.lng
-          };
-          nodes.push(node);
-          
-          const marker = L.marker(latlng)
-            .addTo(map)
-            .bindPopup(`Node ${id}<br>Lat: ${latlng.lat.toFixed(5)}<br>Lng: ${latlng.lng.toFixed(5)}`);
-            marker.on('click', () => createPath(id));
-            markers.push(marker);
-          markers.push(marker);
-
-          if (nodes.length > 1) {
-            const prevNode = nodes[nodes.length - 2];
-            const prevLatLng = L.latLng(prevNode.lat, prevNode.lng);
-            const distanceMeters = prevLatLng.distanceTo(latlng);
-
-            totalDistanceWalkedMeters += distanceMeters;
-
-            const totalWalkingTimeInMinutes = ((distanceMeters / walkSpeedOfNormalHumanBeing) / 60 ) * 1.5;
-
-            const edge = {
-              from: prevNode.id,
-              to: node.id,
-              distanceMeters: distanceMeters,
-              totalWalkingTimeInMinutes: totalWalkingTimeInMinutes
-            };
-            edges.push(edge);
-
-            const line = L.polyline(
-              [
-                [prevNode.lat, prevNode.lng],
-                [node.lat, node.lng]
-              ],
-              { weight: 4 }
-            ).addTo(map);
-            lines.push(line);
-          }
-
-          updateInfo();
-        });
-
         updateInfo();
   </script>
 </body>
