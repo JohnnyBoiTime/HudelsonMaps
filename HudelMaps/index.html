@@ -51,7 +51,7 @@
     <div id="info"></div>
     <div style="margin-top: 6px;">
       <input type="file" id="inputFile" accept=".json" style="margin-top:6px;"/> 
-      <button id="resetBtn">Reset graph</button>
+      <button id="resetPointsBtn">Reset points</button>
     </div>
     <div>
     </div>
@@ -73,6 +73,9 @@
     let destinationNode = 0;
     let distanceMeters = 0;
     let timeWalkingInMinutes = 0;
+    // globals for lat and long of user selected map points
+    let point1 = [Number.MAX_VALUE, Number.MAX_VALUE];
+    let point2 = [Number.MAX_VALUE, Number.MAX_VALUE];
 
     function highlightQuickestPath(path) {
       
@@ -118,8 +121,9 @@
       }
 
       // Selecting second node -> compute path
-      if (selectedPath.length == 1 && selectedPath[0] != node) {
-        selectedPath.push(node);
+      //if (selectedPath.length == 1 && selectedPath[0] != node) {
+      else {
+        selectedPath[1] = node;
         startingNode = selectedPath[0];
         destinationNode = selectedPath[1];
         
@@ -135,13 +139,10 @@
 
         // Reset so user can find a new destination to and from
         // if needed
-        selectedPath = [];
         return;
 
         // If more than 2 nodes are selected, reset to current node
       }
-
-       selectedPath = [nodeId];
     }
 
     function adjacencyList() {
@@ -226,6 +227,93 @@
       };
     }
 
+      function findNearestNode(lat, lng) {
+        if (nodes.length === 0) {
+          alert("No graph loaded! Please upload a JSON file first.");
+          return [-1, 0, 0];
+        }
+
+        return calculateNearest(nodes, lat, lng);
+      }
+
+      function calculateNearest(nodeList, lat, lng) {
+        let minDist = Number.MAX_VALUE;
+        let minNodeID = -1;
+        let minLat = -1;
+        let minLng = -1;
+
+        for (const node of nodeList) {
+          const candidate = Math.sqrt((lat - node.lat) ** 2 + (lng - node.lng) ** 2);
+          if (candidate < minDist) {
+            minDist = candidate;
+            minNodeID = node.id;
+            minLat = node.lat;
+            minLng = node.lng;
+          }
+        }
+        return [minNodeID, minLat, minLng];
+      }
+
+      function loadGraphFromExistingJson(graph) {
+        // Copy over the JSON's node and edge data
+        nodes = graph.nodes;
+        edges = graph.edges;
+
+        // Clear map data for re-adding new data
+        markers.forEach(marker => map.removeLayer(marker));
+        lines.forEach(line => map.removeLayer(line));
+        markers = [];
+        lines = [];
+
+        // Map for quick lookups
+        const findNodeById = new Map();
+        nodes.forEach(node => findNodeById.set(node.id, node));
+
+        // Add nodes as lightweight circleMarkers
+        nodes.forEach(node => {
+          const circle = L.circleMarker([node.lat, node.lng], {
+            radius: 4,
+            fillColor: '#3388ff',
+            color: '#3388ff',
+            weight: 1,
+            fillOpacity: 0.8
+          }).addTo(map);
+
+          circle.on('click', () => createPath(node.id));
+          circle.bindTooltip(`Node ${node.id}`, { direction: 'top', offset: [0, -5] });
+
+          markers.push(circle);
+        });
+
+        // Draw edges
+        edges.forEach(edge => {
+          const startNode = findNodeById.get(edge.from);
+          const destinationNode = findNodeById.get(edge.to);
+
+          const distanceMeters = edge.distanceMeters;
+          totalDistanceWalkedMeters += distanceMeters;
+
+          const lineBetweenNodes = L.polyline(
+            [
+              [startNode.lat, startNode.lng],
+              [destinationNode.lat, destinationNode.lng]
+            ],
+            { weight: 4 }
+          ).addTo(map);
+
+          lines.push(lineBetweenNodes);
+        });
+
+        updateInfo();
+      }
+      path.reverse();
+
+      return {
+        distance: distanceMap.get(endingNodeId),
+        path: path
+      };
+    }
+
 
     function loadGraphFromExistingJson(graph) {
             
@@ -276,6 +364,8 @@
 
         const inputFile = document.getElementById('inputFile');
 
+        const inputFile = document.getElementById('inputFile');
+
         inputFile.addEventListener('change', function(event) {
           const file = event.target.files[0];
 
@@ -307,7 +397,7 @@
         }).addTo(map);
 
         const infoDiv = document.getElementById('info');
-        const resetBtn = document.getElementById('resetBtn');
+        const resetPointsBtn = document.getElementById('resetPointsBtn');
         const downloadBtn = document.getElementById('downloadBtn');
 
         const walkSpeedOfNormalHumanBeing = 1.4; // 1.4 meters/second
@@ -327,24 +417,52 @@
           `Nodes: ${nodes.length} <br>` + 
           `Edges: ${edges.length}.<br>` + 
           `Total distance to destinaton: ${distanceMeters.toFixed(2)}m <br>` + 
-          `Approximate walk time: ${timeWalkingInMinutes.toFixed(2)} minutes <br>`
+          `Approximate walk time: ${timeWalkingInMinutes.toFixed(2)} minutes <br>` +
+          `Point 1: ` + ((point1[0] === Number.MAX_VALUE && point1[1] === Number.MAX_VALUE) ? 
+            'Not selected <br>' : `${point1[0]}, ${point1[1]}<br>`) + 
+          `Point 2: ` + ((point2[0] === Number.MAX_VALUE && point2[1] === Number.MAX_VALUE) ? 
+            'Not selected <br>' : `${point2[0]}, ${point2[1]}<br>`);
         }
 
-        function resetGraph() {
-          nodes = [];
-          edges = [];
-          totalDistanceWalkedMeters = 0;
-
-          markers.forEach(m => map.removeLayer(m));
-          lines.forEach(l => map.removeLayer(l));
-          markers = [];
-          lines = [];
-
+        function resetPoints() {
+          point1 = [Number.MAX_VALUE, Number.MAX_VALUE];
+          point2 = [Number.MAX_VALUE, Number.MAX_VALUE];
+          selectedPath = [];
 
           updateInfo();
         }
 
-        resetBtn.addEventListener('click', resetGraph);
+        // event listener for clicking on the map
+        map.on('click', async function(e) {
+          // if both points are unchosen, set point1
+          if ((point1[0] == Number.MAX_VALUE && point1[1] == Number.MAX_VALUE) && 
+            (point2[0] == Number.MAX_VALUE && point2[1] == Number.MAX_VALUE)) {
+              console.log("YIPEEEE");
+              const [nearestNodeId, nodeLat, nodeLng] = findNearestNode(e.latlng.lat, e.latlng.lng);
+              createPath(nearestNodeId);
+              point1[0] = e.latlng.lat;
+              point1[1] = e.latlng.lng;
+          }
+          else {
+              const [nearestNodeId, nodeLat, nodeLng] = findNearestNode(e.latlng.lat, e.latlng.lng);
+              point2[0] = e.latlng.lat;
+              point2[1] = e.latlng.lng;
+              createPath(nearestNodeId);
+          }
+          const lat = e.latlng.lat;
+          const lng = e.latlng.lng;
+
+          console.log("Clicked at:", lat, lng);
+
+          // Example: find nearest node
+          const [nearestNodeId, nodeLat, nodeLng] = findNearestNode(lat, lng);
+          console.log("Nearest node:", nearestNodeId, "at", nodeLat, nodeLng);
+
+          // Optional: do something else with the click coordinates
+          updateInfo();
+      });
+
+        resetPointsBtn.addEventListener('click', resetPoints);
         updateInfo();
   </script>
 </body>
