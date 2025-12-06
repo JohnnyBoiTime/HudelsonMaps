@@ -51,6 +51,7 @@
     <div id="info"></div>
     <div style="margin-top: 6px;">
       <input type="file" id="inputFile" accept=".json" style="margin-top:6px;"/> 
+      <button id="hideOverlay">Toggle Overlay</button>
       <button id="resetPointsBtn">Reset points</button>
     </div>
     <div>
@@ -73,6 +74,14 @@
     let destinationNode = 0;
     let distanceMeters = 0;
     let timeWalkingInMinutes = 0;
+    let hideOverlayOrNo = false; // Tohgle to show overlay! false = show, true = hide 
+    const walkSpeedOfNormalHumanBeing = 1.4; // 1.4 meters/second
+    let nodes = [];
+    let edges = [];
+    let markers = [];
+    let lines = [];
+
+        let totalDistanceWalkedMeters = 0; // In meters
     // globals for lat and long of user selected map points
     let point1 = [Number.MAX_VALUE, Number.MAX_VALUE];
     let point2 = [Number.MAX_VALUE, Number.MAX_VALUE];
@@ -112,6 +121,43 @@
 
     }
 
+    /*
+    function justShowHighlightedPath() {
+      lines.forEach(line => {
+        if (!highlightSelectedPath.includes(line)) {
+         map.removeLayer(line); 
+        }
+      });
+
+       markers.forEach(marker => {
+          if (marker != destinationNode && marker != startingNode) {
+            map.removeLayer(marker);
+          }
+        });
+    }
+
+    */
+
+    function hideTheOverlay() {
+      
+      // Toggle overlay on or off
+      hideOverlayOrNo = !hideOverlayOrNo;
+
+      // Off
+      if (hideOverlayOrNo == true) {
+        lines.forEach(line => map.removeLayer(line));
+        markers.forEach(marker => map.removeLayer(marker));
+      }
+
+      // On
+      else {
+        lines.forEach(line => line.addTo(map));
+        markers.forEach(marker => marker.addTo(map));
+        highlightSelectedPath.forEach(line => line.bringToFront());
+      }
+
+    }
+
     function createPath(node) {
 
       // Selecting first node
@@ -134,6 +180,7 @@
         timeWalkingInMinutes = (distanceMeters / walkSpeedOfNormalHumanBeing) / 60 * 1.5;
 
         highlightQuickestPath(resultForPath.path);
+        justShowHighlightedPath();
 
         updateInfo();
 
@@ -339,19 +386,11 @@
           attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
 
+        // Elements from the dom
         const infoDiv = document.getElementById('info');
         const resetPointsBtn = document.getElementById('resetPointsBtn');
+        const hideOverlay = document.getElementById('hideOverlay');
         const downloadBtn = document.getElementById('downloadBtn');
-
-        const walkSpeedOfNormalHumanBeing = 1.4; // 1.4 meters/second
-
-        let nodes = [];
-        let edges = [];
-
-        let markers = [];
-        let lines = [];
-
-        let totalDistanceWalkedMeters = 0; // In meters
 
         function updateInfo() {
           const totalDistanceInKM = (totalDistanceWalkedMeters / 1000);
@@ -405,7 +444,9 @@
           updateInfo();
       });
 
+        //  Buttons!
         resetPointsBtn.addEventListener('click', resetPoints);
+        hideOverlay.addEventListener('click', hideTheOverlay);
         updateInfo();
   </script>
 </body>
