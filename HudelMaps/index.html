@@ -371,7 +371,7 @@
           point1 = [Number.MAX_VALUE, Number.MAX_VALUE];
           point2 = [Number.MAX_VALUE, Number.MAX_VALUE];
           selectedPath = [];
-
+          highlightSelectedPath.forEach(line => map.removeLayer(line));
           updateInfo();
         }
 
