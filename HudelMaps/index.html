@@ -306,6 +306,63 @@
 
         updateInfo();
       }
+      path.reverse();
+
+      return {
+        distance: distanceMap.get(endingNodeId),
+        path: path
+      };
+    }
+
+
+    function loadGraphFromExistingJson(graph) {
+            
+            // Copy over the JSON's node and edge data
+            nodes = graph.nodes;
+            edges = graph.edges;
+
+            // Clear map data for re-adding new data.
+            // marker = edge
+            // node = line
+            markers.forEach(marker => map.removeLayer(marker));
+            lines.forEach(line => map.removeLayer(line));
+            markers = [];
+            lines = [];
+
+            // Map for quick lookups
+            const findNodeById = new Map();
+            nodes.forEach(node => findNodeById.set(node.id, node));
+
+            // Add nodes and edges from JSON, create path by
+            // clicking on 2 nodes
+            nodes.forEach(node => {
+              const latLong = L.latLng(node.lat, node.lng);
+              const marker = L.marker(latLong).addTo(map)
+              .bindPopup(`Node ${node.id}<br>Lat: ${node.lat.toFixed(5)}<br>Long: ${node.lng.toFixed(5)}`);
+              marker.on('click', () => createPath(node.id));
+              markers.push(marker);
+            });
+
+            edges.forEach(edge => {
+              const startNode = findNodeById.get(edge.from);
+              const destinationNode = findNodeById.get(edge.to);
+
+              const distanceMeters = edge.distanceMeters;
+              totalDistanceWalkedMeters += distanceMeters;
+
+              const lineBetweenNodes = L.polyline(
+                [
+                  [startNode.lat, startNode.lng],
+                  [destinationNode.lat, destinationNode.lng]
+                ],
+                { weight: 4 }
+            ).addTo(map);
+              lines.push(lineBetweenNodes);
+            })
+            updateInfo();
+          }
+
+        const inputFile = document.getElementById('inputFile');
 
         const inputFile = document.getElementById('inputFile');
 
@@ -410,3 +467,4 @@
   </script>
 </body>
 </html>
+
