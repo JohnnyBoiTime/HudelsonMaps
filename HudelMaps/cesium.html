@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Pullman Road Graph – Cesium 3D</title>
+
+  <link
+    href="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Widgets/widgets.css"
+    rel="stylesheet"
+  />
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #020617;
+      color: #f9fafb;
+    }
+
+    #app {
+      display: flex;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    #sidebar {
+      width: 280px;
+      padding: 14px 16px;
+      box-sizing: border-box;
+      border-right: 1px solid rgba(148, 163, 184, 0.35);
+      background: rgba(15, 23, 42, 0.72);
+      backdrop-filter: blur(10px);
+      z-index: 10;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    #sidebar h1 {
+      margin: 0 0 4px;
+      font-size: 18px;
+      letter-spacing: 0.03em;
+    }
+
+    #sidebar p {
+      margin: 0;
+      font-size: 13px;
+      color: #cbd5f5;
+    }
+
+    #sidebar .metric {
+      font-size: 12px;
+      margin-top: 4px;
+      line-height: 1.4;
+      color: #e5e7eb;
+    }
+
+    #sidebar button {
+      width: 100%;
+      padding: 6px 8px;
+      margin-top: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      border-radius: 6px;
+      border: 1px solid rgba(148, 163, 184, 0.7);
+      background: radial-gradient(circle at top left,
+        rgba(248, 250, 252, 0.12),
+        rgba(15, 23, 42, 0.9));
+      color: #f9fafb;
+      transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+    }
+
+    #sidebar button:hover {
+      background: radial-gradient(circle at top left,
+        rgba(248, 250, 252, 0.18),
+        rgba(15, 23, 42, 0.95));
+      box-shadow: 0 0 12px rgba(248, 250, 252, 0.25);
+      transform: translateY(-1px);
+    }
+
+    #sidebar button:active {
+      transform: translateY(0);
+      box-shadow: none;
+    }
+
+    #metrics {
+      margin-top: 2px;
+      padding-top: 4px;
+      border-top: 1px solid rgba(148, 163, 184, 0.35);
+    }
+
+    .credit {
+      font-size: 10px;
+      color: #9ca3af;
+      margin-top: auto;
+      padding-top: 6px;
+      border-top: 1px solid rgba(148, 163, 184, 0.35);
+    }
+
+    #cesiumContainer {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .cesium-viewer {
+      background: #020617;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="sidebar">
+      <h1>Pullman Graph 3D</h1>
+      <p>
+        Click two points on Pullman. We snap to the nearest graph nodes,
+        run Dijkstra on your road graph, and animate the shortest path search in 3D.
+      </p>
+      <p class="metric" id="status">Loading Cesium…</p>
+      <p class="metric" id="metrics"></p>
+      <button id="resetBtn">Reset selection</button>
+      <button id="toggleAnimBtn">Toggle animation: ON</button>
+      <button id="toggleEdgesBtn">Toggle full graph</button>
+      <div class="credit">
+        Data: Pullman road graph<br />
+        Engine: CesiumJS + World Terrain
+      </div>
+    </div>
+    <div id="cesiumContainer"></div>
+  </div>
+
+  <script
+    src="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Cesium.js">
+  </script>
+
+  <script>
+    Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIzNzEzNDBkMi03NmQ5LTQ3MjUtOTljNC00OTllY2I1ZjliY2YiLCJpZCI6MzY3MjkxLCJpYXQiOjE3NjUwNjg5MDR9.-7d8bj9ytmFGe9tm2kmpjfBcaNJwS-jGoiPNg7RBTdo";
+
+    const statusEl  = document.getElementById("status");
+    const metricsEl = document.getElementById("metrics");
+    const resetBtn  = document.getElementById("resetBtn");
+    const toggleEdgesBtn = document.getElementById("toggleEdgesBtn");
+    const toggleAnimBtn  = document.getElementById("toggleAnimBtn");
+
+    const WALK_SPEED_MPS = 1.4;
+    const STEP_DELAY_MS = 3;
+    const EDGE_DELAY_MS = 1;
+
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    let viewer;
+    let nodes = [];
+    let edges = [];
+    let nodesById = new Map();
+    let adjacency = new Map();
+
+    let startNodeId = null;
+    let endNodeId   = null;
+
+    let fullGraphEntities = [];
+    let nodeLabelEntities = [];
+    let pathEntity = null;
+
+    let explorationEntities = [];
+    let currentNodeEntity = null;
+    let edgesVisible = true;
+    let isRunning = false;
+    let animateDijkstra = true;
+
+    function initViewer() {
+      viewer = new Cesium.Viewer("cesiumContainer", {
+        terrain: Cesium.Terrain.fromWorldTerrain(),
+        animation: false,
+        timeline: false,
+        sceneModePicker: false,
+        baseLayerPicker: true,
+        geocoder: false,
+        selectionIndicator: false,
+        infoBox: false,
+        navigationHelpButton: false
+      });
+
+      viewer.scene.globe.enableLighting = true;
+
+      viewer.camera.setView({
+        destination: Cesium.Cartesian3.fromDegrees(-117.165, 46.731, 2200.0),
+        orientation: {
+          heading: Cesium.Math.toRadians(-20.0),
+          pitch:   Cesium.Math.toRadians(-50.0),
+          roll:    0.0
+        }
+      });
+
+      statusEl.textContent = "Loading graph JSON…";
+    }
+
+    async function loadGraph() {
+      const response = await fetch("Full_Pullman_Road_Graph_Data.json");
+      const graph = await response.json();
+
+      nodes = graph.nodes;
+      edges = graph.edges;
+
+      nodesById = new Map(nodes.map(n => [n.id, n]));
+      adjacency = buildAdjacency(nodes, edges);
+
+      statusEl.textContent =
+        `Graph loaded: ${nodes.length} nodes, ${edges.length} edges.`;
+
+      drawFullGraph();
+      drawNodeLabels();
+      setupClickHandler();
+    }
+
+    function buildAdjacency(nodes, edges) {
+      const adj = new Map();
+      nodes.forEach(n => adj.set(n.id, []));
+      edges.forEach(e => {
+        const w = e.distanceMeters || e.distance || 0;
+        adj.get(e.from).push({ to: e.to, weight: w });
+        adj.get(e.to).push({ to: e.from, weight: w });
+      });
+      return adj;
+    }
+
+    function drawFullGraph() {
+      clearFullGraph();
+
+      fullGraphEntities = edges.map(e => {
+        const a = nodesById.get(e.from);
+        const b = nodesById.get(e.to);
+        if (!a || !b) return null;
+
+        return viewer.entities.add({
+          polyline: {
+            positions: Cesium.Cartesian3.fromDegreesArray([
+              a.lng, a.lat,
+              b.lng, b.lat
+            ]),
+            width: 2.5,
+            material: Cesium.Color.fromCssColorString("#1f6feb").withAlpha(0.5),
+            clampToGround: true
+          }
+        });
+      }).filter(x => x !== null);
+    }
+
+    function clearFullGraph() {
+      if (!viewer) return;
+      fullGraphEntities.forEach(ent => viewer.entities.remove(ent));
+      fullGraphEntities = [];
+    }
+
+    function setFullGraphVisibility(visible) {
+      fullGraphEntities.forEach(ent => ent.show = visible);
+      nodeLabelEntities.forEach(ent => ent.show = visible);
+    }
+
+    function drawNodeLabels() {
+      nodeLabelEntities.forEach(ent => viewer.entities.remove(ent));
+      nodeLabelEntities = [];
+
+      nodes.forEach(n => {
+        if (!n.name) return;
+
+        const labelEnt = viewer.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(n.lng, n.lat),
+          label: {
+            text: n.name,
+            font: "13px 'Segoe UI', sans-serif",
+            fillColor: Cesium.Color.WHITE,
+            showBackground: true,
+            backgroundColor: Cesium.Color.fromAlpha(Cesium.Color.BLACK, 0.65),
+            pixelOffset: new Cesium.Cartesian2(0, -18),
+            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+            scaleByDistance: new Cesium.NearFarScalar(1200, 1.0, 6000, 0.0),
+            translucencyByDistance: new Cesium.NearFarScalar(1200, 1.0, 6000, 0.0)
+          }
+        });
+
+        nodeLabelEntities.push(labelEnt);
+      });
+    }
+
+    function clearExploration() {
+      explorationEntities.forEach(ent => viewer.entities.remove(ent));
+      explorationEntities = [];
+      if (currentNodeEntity) {
+        viewer.entities.remove(currentNodeEntity);
+        currentNodeEntity = null;
+      }
+    }
+
+    function highlightCurrentNode(id) {
+      if (currentNodeEntity) {
+        viewer.entities.remove(currentNodeEntity);
+        currentNodeEntity = null;
+      }
+      const n = nodesById.get(id);
+      if (!n) return;
+
+      currentNodeEntity = viewer.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(n.lng, n.lat),
+        point: {
+          pixelSize: 10,
+          color: Cesium.Color.WHITE,
+          outlineColor: Cesium.Color.fromCssColorString("#5ec8ff"),
+          outlineWidth: 2,
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+        }
+      });
+    }
+
+    function addExplorationEdge(fromId, toId) {
+      const a = nodesById.get(fromId);
+      const b = nodesById.get(toId);
+      if (!a || !b) return;
+
+      const ent = viewer.entities.add({
+        polyline: {
+          positions: Cesium.Cartesian3.fromDegreesArray([a.lng, a.lat, b.lng, b.lat]),
+          width: 3,
+          material: new Cesium.PolylineGlowMaterialProperty({
+            glowPower: 0.25,
+            color: Cesium.Color.ORANGE
+          }),
+          clampToGround: true
+        }
+      });
+      explorationEntities.push(ent);
+    }
+
+    function dijkstra(startId, endId) {
+      const dist = new Map();
+      const prev = new Map();
+      const unvisited = new Set(adjacency.keys());
+
+      adjacency.forEach((_, id) => dist.set(id, Infinity));
+      dist.set(startId, 0);
+
+      while (unvisited.size > 0) {
+        let u = null;
+        let best = Infinity;
+        for (const id of unvisited) {
+          const d = dist.get(id);
+          if (d < best) {
+            best = d;
+            u = id;
+          }
+        }
+
+        if (u === null || best === Infinity) break;
+        unvisited.delete(u);
+        if (u === endId) break;
+
+        const neighbors = adjacency.get(u) || [];
+        for (const { to, weight } of neighbors) {
+          if (!unvisited.has(to)) continue;
+          const alt = best + weight;
+          if (alt < dist.get(to)) {
+            dist.set(to, alt);
+            prev.set(to, u);
+          }
+        }
+      }
+
+      const path = [];
+      let cur = endId;
+      if (!prev.has(cur) && cur !== startId) {
+        return { path: [], distance: Infinity };
+      }
+
+      while (cur !== undefined) {
+        path.unshift(cur);
+        if (cur === startId) break;
+        cur = prev.get(cur);
+      }
+
+      return { path, distance: dist.get(endId) };
+    }
+
+    async function runDijkstraAnimated(startId, endId) {
+      isRunning = true;
+      clearExploration();
+      clearPath();
+
+      const dist = new Map();
+      const prev = new Map();
+      const unvisited = new Set(adjacency.keys());
+
+      adjacency.forEach((_, id) => dist.set(id, Infinity));
+      dist.set(startId, 0);
+
+      let step = 0;
+
+      while (unvisited.size > 0) {
+        let u = null;
+        let best = Infinity;
+        for (const id of unvisited) {
+          const d = dist.get(id);
+          if (d < best) {
+            best = d;
+            u = id;
+          }
+        }
+
+        if (u === null || best === Infinity) break;
+        unvisited.delete(u);
+
+        step += 1;
+        highlightCurrentNode(u);
+        statusEl.textContent =
+          `Dijkstra step ${step}: visiting node ${u} (dist = ${best.toFixed(1)} m)`;
+        await sleep(STEP_DELAY_MS);
+
+        if (u === endId) break;
+
+        const neighbors = adjacency.get(u) || [];
+        for (const { to, weight } of neighbors) {
+          if (!unvisited.has(to)) continue;
+
+          const alt = best + weight;
+          if (alt < dist.get(to)) {
+            dist.set(to, alt);
+            prev.set(to, u);
+            addExplorationEdge(u, to);
+            await sleep(EDGE_DELAY_MS);
+          }
+        }
+      }
+
+      const path = [];
+      let cur = endId;
+      if (!prev.has(cur) && cur !== startId) {
+        isRunning = false;
+        return { path: [], distance: Infinity };
+      }
+
+      while (cur !== undefined) {
+        path.unshift(cur);
+        if (cur === startId) break;
+        cur = prev.get(cur);
+      }
+
+      const distance = dist.get(endId);
+      isRunning = false;
+      return { path, distance };
+    }
+
+    function clearPath() {
+      if (pathEntity && viewer) {
+        viewer.entities.remove(pathEntity);
+        pathEntity = null;
+      }
+      metricsEl.textContent = "";
+    }
+
+    function showPath(path, totalDistanceMeters) {
+      clearPath();
+      if (!path || path.length === 0) return;
+
+      const coordsDeg = [];
+      path.forEach(id => {
+        const n = nodesById.get(id);
+        coordsDeg.push(n.lng, n.lat);
+      });
+
+      pathEntity = viewer.entities.add({
+        polyline: {
+          positions: Cesium.Cartesian3.fromDegreesArray(coordsDeg),
+          width: 8,
+          material: new Cesium.PolylineGlowMaterialProperty({
+            glowPower: 0.4,
+            color: Cesium.Color.fromCssColorString("#8fd4ff")
+          }),
+          clampToGround: true
+        }
+      });
+
+      const mins = (totalDistanceMeters / WALK_SPEED_MPS) / 60 * 1.4;
+      metricsEl.innerHTML =
+        `<strong>Path length:</strong> ${totalDistanceMeters.toFixed(1)} m<br>` +
+        `<strong>Est. walk time:</strong> ${mins.toFixed(1)} min<br>` +
+        `<strong>Nodes:</strong> ${path.length}`;
+    }
+
+    function setupClickHandler() {
+      const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+
+      handler.setInputAction(async function(click) {
+        if (isRunning) {
+          statusEl.textContent = "Dijkstra is already running — please wait.";
+          return;
+        }
+
+        const cartesian = viewer.scene.pickPosition(click.position) ||
+          viewer.camera.pickEllipsoid(click.position, viewer.scene.globe.ellipsoid);
+
+        if (!cartesian) {
+          return;
+        }
+
+        const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
+        const lonDeg = Cesium.Math.toDegrees(cartographic.longitude);
+        const latDeg = Cesium.Math.toDegrees(cartographic.latitude);
+
+        const nearestId = findNearestNodeId(lonDeg, latDeg);
+        if (nearestId === null) return;
+
+        if (startNodeId === null) {
+          startNodeId = nearestId;
+          endNodeId = null;
+          clearExploration();
+          clearPath();
+          statusEl.textContent =
+            `Start node: ${startNodeId}. Click a second point for destination.`;
+        } else if (endNodeId === null) {
+          endNodeId = nearestId;
+          statusEl.textContent =
+            `Start: ${startNodeId}, End: ${endNodeId}. ` +
+            (animateDijkstra ? "Running Dijkstra…" : "Computing shortest path…");
+
+          let result;
+          if (animateDijkstra) {
+            result = await runDijkstraAnimated(startNodeId, endNodeId);
+          } else {
+            clearExploration();
+            result = dijkstra(startNodeId, endNodeId);
+          }
+
+          if (!result.path.length || !isFinite(result.distance)) {
+            statusEl.textContent = "No path found between those nodes.";
+            clearPath();
+            return;
+          }
+
+          statusEl.textContent =
+            `Shortest path found (${result.path.length} nodes).`;
+          showPath(result.path, result.distance);
+        } else {
+          startNodeId = nearestId;
+          endNodeId = null;
+          clearExploration();
+          clearPath();
+          statusEl.textContent =
+            `Start node reset to ${startNodeId}. Click again for destination.`;
+        }
+      }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+      resetBtn.addEventListener("click", () => {
+        if (isRunning) return;
+        startNodeId = null;
+        endNodeId = null;
+        clearExploration();
+        clearPath();
+        statusEl.textContent =
+          `Graph loaded: ${nodes.length} nodes, ${edges.length} edges.`;
+      });
+
+      toggleEdgesBtn.addEventListener("click", () => {
+        edgesVisible = !edgesVisible;
+        setFullGraphVisibility(edgesVisible);
+      });
+
+      toggleAnimBtn.addEventListener("click", () => {
+        animateDijkstra = !animateDijkstra;
+        toggleAnimBtn.textContent =
+          `Toggle animation: ${animateDijkstra ? "ON" : "OFF"}`;
+      });
+    }
+
+    function findNearestNodeId(lonDeg, latDeg) {
+      let bestId = null;
+      let best = Number.POSITIVE_INFINITY;
+
+      for (const n of nodes) {
+        const dLon = lonDeg - n.lng;
+        const dLat = latDeg - n.lat;
+        const d = Math.sqrt(dLon * dLon + dLat * dLat);
+        if (d < best) {
+          best = d;
+          bestId = n.id;
+        }
+      }
+      return bestId;
+    }
+
+    (async function bootstrap() {
+      try {
+        initViewer();
+        await loadGraph();
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "Error loading Cesium or graph data.";
+      }
+    })();
+  </script>
+</body>
+</html>
