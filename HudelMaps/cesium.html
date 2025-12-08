@@ -280,9 +280,9 @@
               a.lng, a.lat,
               b.lng, b.lat
             ]),
-            width: 3.5,
+            width: 4,
             // this is the general "graph skeleton" color
-            material: Cesium.Color.fromCssColorString("#1f6feb"),
+            material: Cesium.Color.fromCssColorString("#60a5fa").withAlpha(0.75), 
             clampToGround: true
           }
         });
@@ -290,7 +290,9 @@
     }
 
     function clearAllRoadPolylines() {
-      if (!viewerInstance) return;
+      if (!viewerInstance) {
+        return;
+      }
       roadSegments.forEach(entity => viewerInstance.entities.remove(entity));
       roadSegments = [];
     }
@@ -306,8 +308,9 @@
 
       graphNodes.forEach(node => {
         // only show labels for nodes that actually have a "name" field
-        if (!node.name) return;
-
+        if (!node.name) {
+          return;
+        }
         const labelEntity = viewerInstance.entities.add({
           position: Cesium.Cartesian3.fromDegrees(node.lng, node.lat),
           label: {
@@ -342,20 +345,24 @@
         viewerInstance.entities.remove(currentNodeDot);
         currentNodeDot = null;
       }
+
       const node = nodesById.get(nodeId);
       if (!node) return;
 
       currentNodeDot = viewerInstance.entities.add({
         position: Cesium.Cartesian3.fromDegrees(node.lng, node.lat),
         point: {
-          pixelSize: 10,
-          color: Cesium.Color.WHITE,
-          outlineColor: Cesium.Color.fromCssColorString("#5ec8ff"),
-          outlineWidth: 2,
-          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+          pixelSize: 16,
+          color: Cesium.Color.fromCssColorString("#0A84FF"),      // same route blue
+          outlineColor: Cesium.Color.fromCssColorString("#003E7C"),
+          outlineWidth: 3,
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          scaleByDistance: new Cesium.NearFarScalar(500, 1.5, 6000, 0.7)
         }
       });
     }
+
 
     function addExploredEdge(fromId, toId) {
       const a = nodesById.get(fromId);
@@ -363,18 +370,18 @@
       if (!a || !b) return;
 
       const explored = viewerInstance.entities.add({
-        polyline: {
-          positions: Cesium.Cartesian3.fromDegreesArray([a.lng, a.lat, b.lng, b.lat]),
-          width: 4,
-          material: new Cesium.PolylineGlowMaterialProperty({
-            glowPower: 0.25,
-            color: Cesium.Color.ORANGE.withAlpha(0.9)
-          }),
-          clampToGround: true
-        }
+      polyline: {
+        positions: Cesium.Cartesian3.fromDegreesArray([a.lng, a.lat, b.lng, b.lat]),
+        width: 6,
+        material: Cesium.Color.fromCssColorString("#f97316").withAlpha(1.0),
+        clampToGround: true
+      }
       });
+
+
       exploredEdges.push(explored);
     }
+
 
     // Dijkstra (no animation)
     function runDijkstraInstant(startId, endId) {
@@ -396,13 +403,18 @@
           }
         }
 
-        if (bestNode === null || bestDist === Infinity) break;
+        if (bestNode === null || bestDist === Infinity) {
+          break;
+        }
         remaining.delete(bestNode);
-        if (bestNode === endId) break;
-
+        if (bestNode === endId) {
+          break;
+        }
         const neighbors = adjacencyList.get(bestNode) || [];
         for (const { to, weight } of neighbors) {
-          if (!remaining.has(to)) continue;
+          if (!remaining.has(to)) {
+            continue;
+          }
           const alt = bestDist + weight;
           if (alt < distances.get(to)) {
             distances.set(to, alt);
@@ -420,7 +432,9 @@
 
       while (cur !== undefined) {
         path.unshift(cur);
-        if (cur === startId) break;
+        if (cur === startId) {
+          break;
+        }
         cur = previous.get(cur);
       }
 
@@ -453,7 +467,9 @@
           }
         }
 
-        if (bestNode === null || bestDist === Infinity) break;
+        if (bestNode === null || bestDist === Infinity) {
+          break;
+        }
         remaining.delete(bestNode);
 
         stepCounter += 1;
@@ -462,12 +478,14 @@
           `Dijkstra step ${stepCounter}: visiting node ${bestNode} (dist ≈ ${bestDist.toFixed(1)} m)`;
         await wait(STEP_DELAY_MS);
 
-        if (bestNode === endId) break;
-
+        if (bestNode === endId) {
+          break;
+        }
         const neighbors = adjacencyList.get(bestNode) || [];
         for (const { to, weight } of neighbors) {
-          if (!remaining.has(to)) continue;
-
+          if (!remaining.has(to)) {
+            continue;
+          }
           const alt = bestDist + weight;
           if (alt < distances.get(to)) {
             distances.set(to, alt);
@@ -488,7 +506,9 @@
 
       while (cur !== undefined) {
         path.unshift(cur);
-        if (cur === startId) break;
+        if (cur === startId) {
+          break;
+        }
         cur = previous.get(cur);
       }
 
@@ -508,8 +528,9 @@
 
     function drawShortestPath(pathIds, totalDistanceMeters) {
       clearShortestPath();
-      if (!pathIds || pathIds.length === 0) return;
-
+      if (!pathIds || pathIds.length === 0) {
+        return;
+      }
       const rawCoords = [];
       pathIds.forEach(id => {
         const node = nodesById.get(id);
@@ -520,9 +541,10 @@
         polyline: {
           positions: Cesium.Cartesian3.fromDegreesArray(rawCoords),
           width: 12,
-          material: new Cesium.PolylineGlowMaterialProperty({
-            glowPower: 0.8,
-            color: Cesium.Color.fromCssColorString("#8fd4ff")
+            material: new Cesium.PolylineOutlineMaterialProperty({
+              color: Cesium.Color.fromCssColorString("#0A84FF"),      // Apple Maps route blue
+              outlineColor: Cesium.Color.fromCssColorString("#003E7C"), // subtle halo
+              outlineWidth: 4
           }),
           clampToGround: true
         }
@@ -554,16 +576,18 @@
             viewerInstance.scene.globe.ellipsoid
           );
 
-        if (!cartesian) return;
-
+        if (!cartesian) {
+          return;
+        }
         const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
         const lonDeg = Cesium.Math.toDegrees(cartographic.longitude);
         const latDeg = Cesium.Math.toDegrees(cartographic.latitude);
 
         const nearestId = findNearestNode(lonDeg, latDeg);
-        if (nearestId === null) return;
-
-        // Special mode: start from user's nearest node
+        if (nearestId === null) {
+          return;
+        }
+        // start from user's nearest node
         if (startPathFromUser && userLatitude !== null && userLongitude !== null) {
           const userStartId = findNearestNode(userLongitude, userLatitude);
           startNodeId = userStartId;
@@ -579,6 +603,9 @@
           } else {
             clearExplorationVisuals();
             result = runDijkstraInstant(startNodeId, endNodeId);
+            if (result.path.length) {
+              showCurrentNodeMarker(endNodeId);
+            }
           }
 
           if (!result.path.length || !isFinite(result.distance)) {
@@ -594,9 +621,9 @@
         }
 
         // Normal click flow:
-        // 1st click → start
-        // 2nd click → end + run algorithm
-        // 3rd click → treat as new start
+        // 1st click start
+        // 2nd click end + run algorithm
+        // 3rd click treat as new start
         if (startNodeId === null) {
           startNodeId = nearestId;
           endNodeId = null;
@@ -616,6 +643,9 @@
           } else {
             clearExplorationVisuals();
             result = runDijkstraInstant(startNodeId, endNodeId);
+            if (result.path.length) {
+              showCurrentNodeMarker(endNodeId);
+            }
           }
 
           if (!result.path.length || !isFinite(result.distance)) {
@@ -628,7 +658,7 @@
             `Shortest path found (${result.path.length} nodes).`;
           drawShortestPath(result.path, result.distance);
         } else {
-          // 3rd click → reset the start node to whatever was clicked
+          // 3rd click resets the start node to whatever was clicked
           startNodeId = nearestId;
           endNodeId = null;
           clearExplorationVisuals();
@@ -638,9 +668,11 @@
         }
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
-      // Reset button: clear everything and go back to the "loaded" state
+      // Reset button, clear everything and go back to the "loaded" state
       resetButton.addEventListener("click", () => {
-        if (dijkstraIsRunning) return;
+        if (dijkstraIsRunning) {
+          return;
+        }
         startNodeId = null;
         endNodeId = null;
         clearExplorationVisuals();
@@ -709,7 +741,8 @@
             color: Cesium.Color.RED,
             outlineColor: Cesium.Color.WHITE,
             outlineWidth: 2,
-            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY
           }
         });
       } else {
