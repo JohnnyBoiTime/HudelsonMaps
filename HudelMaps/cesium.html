@@ -629,7 +629,7 @@
 
       // Automatically go to where the user is located
       if (!hasCenteredOnUser) {
-       const cesiumCoords = Cesium.Cartesian3.fromDegrees(longitude, latitude, 1200.0);
+       const cesiumCoords = Cesium.Cartesian3.fromDegrees(longitude, latitude, 1500.0);
         viewer.camera.flyTo({
           destination: cesiumCoords,
           duration: 1.5
