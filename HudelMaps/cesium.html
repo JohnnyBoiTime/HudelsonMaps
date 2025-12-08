@@ -110,6 +110,19 @@
     .cesium-viewer {
       background: #020617;
     }
+    .images img {
+      width: 100%;
+      object-fit: cover;
+      border-radius: 6px;
+      cursor: pointer;
+      margin: 6px;
+    }
+    .images {
+      overflow-y: auto;
+      flex: 1;
+      overflow-x: hidden;
+    }
+
   </style>
 </head>
 <body>
@@ -128,13 +141,17 @@
       <button id="toggleAnimationButton">Animation: ON</button>
       <button id="startFromUserButton">Start path from user</button>
       <button id="toggleEdgesButton">Toggle full graph</button>
+      <br>
+
+      <h4>Pullman & Campus Locations</h4>
+      <div class="images" id="imageContainer"></div>
 
       <div class="credit">
         Data: Pullman road graph<br />
         Engine: CesiumJS + World Terrain
       </div>
     </div>
-    <div id="cesiumContainer"></div>
+    <div id="cesiumContainer" class></div>
   </div>
 
   <!-- Cesium script itself -->
@@ -143,6 +160,20 @@
   </script>
 
   <script>
+    const images = [
+      { url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSCElFL5LdbDM6HHPN1pUax3jA3jzU_JLDTYA&s", name: "Wilson-Short Hall", lat: 46.730506, long: -117.162511 },
+      { url: "https://cub.wsu.edu/media/ylldyygf/cub-summer-exterior-header.jpg", name: "The CUB", lat: 46.730805, long: -117.163011 },
+      { url: "https://pbs.twimg.com/media/Fa3kVn7VUAAjcNz.jpg", name: "Webster", lat: 46.728899, long: -117.163790 },
+      { url: "https://wpcdn.web.wsu.edu/wp-global/uploads/sites/3508/2017/11/zu_WSU_SPARK_47_990x532_small.jpg", name: "The Spark", lat: 46.728204, long: -117.165412 },
+      { url: "https://libraries.wsu.edu/sites/default/files/holnewpict.jpg", name: "Terrell Library", lat: 46.730772, long: -117.163482 },
+      { url: "https://wpcdn.web.wsu.edu/wp-ip/uploads/sites/2794/2022/03/Bryan-at-dusk.jpeg", name: "Bryan Hall", lat: 46.731348, long: -117.164829 },
+      { url: "https://urec.wsu.edu/media/jmca0xrs/chinook-exterior.jpg", name: "The Chinook", lat: 46.732540, long: -117.165612 },
+      { url: "https://www.heraldnews.com/gcdn/authoring/2016/12/02/NHER/ghows-WL-1660ba17-89ae-47d1-bc04-2e5eb9abc009-b034fa13.jpeg?crop=842,632,x51,y0", name: "Stadium Way McDonalds", lat: 46.739265, long: -117.170376},
+      { url: "https://assets.simpleviewinc.com/simpleview/image/upload/c_fill,h_396,q_75,w_704/v1/crm/pullmanwa/contribution_gallery_480B7DBA-F58E-9CEA-073CD1B888C453E0-480b7cdbc83a9fc_480b86f8-ec44-ded2-e8b4069fd279b76d.jpg", name: "Taco Bell", lat: 46.738815, long: -117.171113 },
+      { url: "https://libraries.wsu.edu/wp-content/uploads/files/paul_brians/palouse/moscow/moscowwelcome.jpg", name: "Moscow", lat: 46.732389, long: -117.039748 },
+      { url: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Jewett_Observatory_01-04-15.jpg/1200px-Jewett_Observatory_01-04-15.jpg", name: "Jewett Observatory", lat: 46.728595, long: -117.153637 },
+    ]
+
     // NOTE: this is my personal Cesium ion token for this class project.
     // If it ever breaks, it's probably because the token got rotated.
     Cesium.Ion.defaultAccessToken =
@@ -378,7 +409,6 @@
       }
       });
 
-
       exploredEdges.push(explored);
     }
 
@@ -558,13 +588,99 @@
         `<strong>Nodes on path:</strong> ${pathIds.length}`;
     }
 
+    async function handleClickLogic(lonDeg, latDeg) {
+      const nearestId = findNearestNode(lonDeg, latDeg);
+      if (nearestId === null) {
+        return;
+      }
+      // start from user's nearest node
+      if (startPathFromUser && userLatitude !== null && userLongitude !== null) {
+        const userStartId = findNearestNode(userLongitude, userLatitude);
+        startNodeId = userStartId;
+        endNodeId = nearestId;
+
+        statusText.textContent =
+          `Start: user location (node ${startNodeId}), End: ${endNodeId}. ` +
+          (animateDijkstra ? "Running Dijkstra with animation…" : "Computing shortest path…");
+
+        let result;
+        if (animateDijkstra) {
+          result = await runDijkstraWithAnimation(startNodeId, endNodeId);
+        } else {
+          clearExplorationVisuals();
+          result = runDijkstraInstant(startNodeId, endNodeId);
+          if (result.path.length) {
+            showCurrentNodeMarker(endNodeId);
+          }
+        }
+
+        if (!result.path.length || !isFinite(result.distance)) {
+          statusText.textContent = "No path found between those nodes.";
+          clearShortestPath();
+          return;
+        }
+
+        statusText.textContent =
+          `Shortest path found (${result.path.length} nodes).`;
+        drawShortestPath(result.path, result.distance);
+        return;
+      }
+
+      // Normal click flow:
+      // 1st click start
+      // 2nd click end + run algorithm
+      // 3rd click treat as new start
+      if (startNodeId === null) {
+        startNodeId = nearestId;
+        endNodeId = null;
+        clearExplorationVisuals();
+        clearShortestPath();
+        statusText.textContent =
+          `Start node set to ${startNodeId}. Click another point for the destination.`;
+      } else if (endNodeId === null) {
+        endNodeId = nearestId;
+        statusText.textContent =
+          `Start: ${startNodeId}, End: ${endNodeId}. ` +
+          (animateDijkstra ? "Running Dijkstra with animation…" : "Computing shortest path (instant)…");
+
+        let result;
+        if (animateDijkstra) {
+          result = await runDijkstraWithAnimation(startNodeId, endNodeId);
+        } else {
+          clearExplorationVisuals();
+          result = runDijkstraInstant(startNodeId, endNodeId);
+          if (result.path.length) {
+            showCurrentNodeMarker(endNodeId);
+          }
+        }
+
+        if (!result.path.length || !isFinite(result.distance)) {
+          statusText.textContent = "No path found between those nodes.";
+          clearShortestPath();
+          return;
+        }
+
+        statusText.textContent =
+          `Shortest path found (${result.path.length} nodes).`;
+        drawShortestPath(result.path, result.distance);
+      } else {
+        // 3rd click resets the start node to whatever was clicked
+        startNodeId = nearestId;
+        endNodeId = null;
+        clearExplorationVisuals();
+        clearShortestPath();
+        statusText.textContent =
+          `Start node changed to ${startNodeId}. Click again to pick a new destination.`;
+      }
+    };
+
     // Mouse interaction
     function setupMouseInteraction() {
       const eventHandler = new Cesium.ScreenSpaceEventHandler(
         viewerInstance.scene.canvas
       );
 
-      eventHandler.setInputAction(async function(click) {
+      const mapClick = eventHandler.setInputAction(async function(click) {
         if (dijkstraIsRunning) {
           statusText.textContent = "Dijkstra is already running, hang on a sec…";
           return;
@@ -583,89 +699,7 @@
         const lonDeg = Cesium.Math.toDegrees(cartographic.longitude);
         const latDeg = Cesium.Math.toDegrees(cartographic.latitude);
 
-        const nearestId = findNearestNode(lonDeg, latDeg);
-        if (nearestId === null) {
-          return;
-        }
-        // start from user's nearest node
-        if (startPathFromUser && userLatitude !== null && userLongitude !== null) {
-          const userStartId = findNearestNode(userLongitude, userLatitude);
-          startNodeId = userStartId;
-          endNodeId = nearestId;
-
-          statusText.textContent =
-            `Start: user location (node ${startNodeId}), End: ${endNodeId}. ` +
-            (animateDijkstra ? "Running Dijkstra with animation…" : "Computing shortest path…");
-
-          let result;
-          if (animateDijkstra) {
-            result = await runDijkstraWithAnimation(startNodeId, endNodeId);
-          } else {
-            clearExplorationVisuals();
-            result = runDijkstraInstant(startNodeId, endNodeId);
-            if (result.path.length) {
-              showCurrentNodeMarker(endNodeId);
-            }
-          }
-
-          if (!result.path.length || !isFinite(result.distance)) {
-            statusText.textContent = "No path found between those nodes.";
-            clearShortestPath();
-            return;
-          }
-
-          statusText.textContent =
-            `Shortest path found (${result.path.length} nodes).`;
-          drawShortestPath(result.path, result.distance);
-          return;
-        }
-
-        // Normal click flow:
-        // 1st click start
-        // 2nd click end + run algorithm
-        // 3rd click treat as new start
-        if (startNodeId === null) {
-          startNodeId = nearestId;
-          endNodeId = null;
-          clearExplorationVisuals();
-          clearShortestPath();
-          statusText.textContent =
-            `Start node set to ${startNodeId}. Click another point for the destination.`;
-        } else if (endNodeId === null) {
-          endNodeId = nearestId;
-          statusText.textContent =
-            `Start: ${startNodeId}, End: ${endNodeId}. ` +
-            (animateDijkstra ? "Running Dijkstra with animation…" : "Computing shortest path (instant)…");
-
-          let result;
-          if (animateDijkstra) {
-            result = await runDijkstraWithAnimation(startNodeId, endNodeId);
-          } else {
-            clearExplorationVisuals();
-            result = runDijkstraInstant(startNodeId, endNodeId);
-            if (result.path.length) {
-              showCurrentNodeMarker(endNodeId);
-            }
-          }
-
-          if (!result.path.length || !isFinite(result.distance)) {
-            statusText.textContent = "No path found between those nodes.";
-            clearShortestPath();
-            return;
-          }
-
-          statusText.textContent =
-            `Shortest path found (${result.path.length} nodes).`;
-          drawShortestPath(result.path, result.distance);
-        } else {
-          // 3rd click resets the start node to whatever was clicked
-          startNodeId = nearestId;
-          endNodeId = null;
-          clearExplorationVisuals();
-          clearShortestPath();
-          statusText.textContent =
-            `Start node changed to ${startNodeId}. Click again to pick a new destination.`;
-        }
+        handleClickLogic(lonDeg, latDeg);
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
       // Reset button, clear everything and go back to the "loaded" state
@@ -722,8 +756,8 @@
       startFromUserButton.addEventListener("click", () => {
         startPathFromUser = !startPathFromUser;
         startFromUserButton.textContent = startPathFromUser
-          ? "Start path from user"
-          : "Start path from first click";
+          ? "Start path from user ON"
+          : "Start path from first click ON";
       });
     }
 
@@ -798,6 +832,22 @@
         statusText.textContent = "Error loading Cesium or graph data (see console).";
       }
     })();
+
+    const container = document.getElementById("imageContainer");
+
+    // put each location image in the sidebar
+    images.forEach((item) => {
+      const img = document.createElement("img");
+      img.src = item.url;
+      img.alt = item.name;
+
+      // when the user clicks the image, get directions to it
+      img.addEventListener("click", () => {
+        handleClickLogic(item.long, item.lat);
+      });
+
+      container.appendChild(img);
+    });
   </script>
 </body>
 </html>
