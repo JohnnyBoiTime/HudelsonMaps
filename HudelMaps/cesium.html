@@ -122,8 +122,9 @@
       <p class="metric" id="status">Loading Cesium…</p>
       <p class="metric" id="metrics"></p>
       <button id="resetBtn">Reset selection</button>
-      <button id="whereAmIBtn">Show current location</button>
+      <button id="whereAmIBtn">Go to current location</button>
       <button id="toggleAnimBtn">Toggle animation: ON</button>
+      <button id="startFromUser">Start path from user</button>
       <button id="toggleEdgesBtn">Toggle full graph</button>
       <div class="credit">
         Data: Pullman road graph<br />
@@ -146,6 +147,7 @@
     const whereAmIBtn = document.getElementById("whereAmIBtn");
     const toggleEdgesBtn = document.getElementById("toggleEdgesBtn");
     const toggleAnimBtn  = document.getElementById("toggleAnimBtn");
+    const startFromUserBtn = document.getElementById("startFromUser");
 
     const WALK_SPEED_MPS = 1.4; 
     const STEP_DELAY_MS = 3;
@@ -161,9 +163,12 @@
 
     // Users locatin on hudelmaps
     let usersLocation = null;
+    let userLongitude = null;
+    let userLatitude = null;
     let userCircle = null;
     let trackUser = null;
     let hasCenteredOnUser = false;
+    let startPathFromUser = false;
 
     let startNodeId = null;
     let endNodeId   = null;
@@ -471,6 +476,7 @@
       if (!path || path.length === 0) return;
 
       const coordsDeg = [];
+
       path.forEach(id => {
         const n = nodesById.get(id);
         coordsDeg.push(n.lng, n.lat);
@@ -517,6 +523,24 @@
 
         const nearestId = findNearestNodeId(lonDeg, latDeg);
         if (nearestId === null) return;
+
+        if (startPathFromUser && userLatitude !== null && userLongitude !== null) {
+          const usersNearestnode = findNearestNodeId(userLongitude, userLatitude);
+          startNodeId = usersNearestnode;
+          endNodeId = nearestId;
+          let result;
+
+          if (animateDijkstra){
+            result = await runDijkstraAnimated(startNodeId, endNodeId);
+          } else {
+            clearExploration();
+            result = dijkstra(startNodeId, endNodeId);
+          }
+
+          showPath(result.path, result.distance);
+          return;
+      }
+        
 
         if (startNodeId === null) {
           startNodeId = nearestId;
@@ -578,6 +602,12 @@
         toggleAnimBtn.textContent =
           `Toggle animation: ${animateDijkstra ? "ON" : "OFF"}`;
       });
+
+      startFromUserBtn.addEventListener("click", () => {
+        startPathFromUser = !startPathFromUser;
+        startFromUserBtn.textContent = startPathFromUser ? "Start path from node" : "Start path from user";
+      });
+
     }
 
     whereAmIBtn.addEventListener("click", () => {
@@ -606,6 +636,8 @@
       const latitude = position.coords.latitude;
       const longitude = position.coords.longitude;
       const usersLocationOnMap = position.coords.accuracy;
+      userLatitude = latitude;
+      userLongitude = longitude;
 
       // Get cesium map coords
       const cesiumCoords = Cesium.Cartesian3.fromDegrees(longitude, latitude);
@@ -623,9 +655,11 @@
           }
         });
       }
+      /*
       else {
         usersLocation.setLatLng(usersLocationOnMap);
       }
+        */
 
       // Automatically go to where the user is located
       if (!hasCenteredOnUser) {
