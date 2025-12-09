@@ -1,12 +1,19 @@
-TO DO LIST:
+GPS-Locater project for Graph Theory.
 
-Leaflet
-Creating the paths
-Multiple markers to create a path
-Calculate distance
-Have it so you can have multiple paths to a destination from a starting point to an end
-Make it so a single node can have several outgoing edges
-Saving graphs as JSON
-Dijkstras algorithm
+Requires Python
 
-Hdfksahdkijsadjkadsjad SUCKER
+
+How to run on linux/mac:
+
+Go to where the Json is and run:
+
+python -m http.server 8000
+
+Then click on cesium.html.
+
+--------------------------------
+
+How to run on windows:
+click on run_server.bat
+
+
