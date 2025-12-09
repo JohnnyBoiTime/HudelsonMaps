@@ -23,7 +23,7 @@
 
       <button id="resetButton">Reset selection</button>
       <button id="whereAmIButton">Go to current location</button>
-      <button id="toggleAnimationButton">Animation: ON</button>
+      <button id="toggleAnimationButton">Animation: OFF</button>
       <button id="startFromUserButton">Start path from user</button>
       <button id="toggleEdgesButton">Toggle full graph</button>
       <br>
@@ -96,7 +96,7 @@
     let currentNodeDot = null;  // white dot showing "current" node in animation
     let showAllEdges = true;
     let dijkstraIsRunning = false;
-    let animateDijkstra = true; // we can flip this from the toggle button
+    let animateDijkstra = false; // we can flip this from the toggle button
 
     // user-location state
     let userMarker = null;
