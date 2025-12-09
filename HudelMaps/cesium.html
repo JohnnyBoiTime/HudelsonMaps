@@ -53,7 +53,7 @@
       { url: "https://libraries.wsu.edu/sites/default/files/holnewpict.jpg", name: "Terrell Library", lat: 46.730772, long: -117.163482 },
       { url: "https://wpcdn.web.wsu.edu/wp-ip/uploads/sites/2794/2022/03/Bryan-at-dusk.jpeg", name: "Bryan Hall", lat: 46.731348, long: -117.164829 },
       { url: "https://urec.wsu.edu/media/jmca0xrs/chinook-exterior.jpg", name: "The Chinook", lat: 46.732540, long: -117.165612 },
-      { url: "https://www.heraldnews.com/gcdn/authoring/2016/12/02/NHER/ghows-WL-1660ba17-89ae-47d1-bc04-2e5eb9abc009-b034fa13.jpeg?crop=842,632,x51,y0", name: "Stadium Way McDonalds", lat: 46.739265, long: -117.170376},
+      { url: "https://www.heraldnews.com/gcdn/authoring/2016/12/02/NHER/ghows-WL-1660ba17-89ae-47d1-bc04-2e5eb9abc009-b034fa13.jpeg?crop=842,632,x51,y0", name: "Stadium Way McDonalds", lat: 46.73948999915676, long: -117.17110852573683},
       { url: "https://assets.simpleviewinc.com/simpleview/image/upload/c_fill,h_396,q_75,w_704/v1/crm/pullmanwa/contribution_gallery_480B7DBA-F58E-9CEA-073CD1B888C453E0-480b7cdbc83a9fc_480b86f8-ec44-ded2-e8b4069fd279b76d.jpg", name: "Taco Bell", lat: 46.738815, long: -117.171113 },
       { url: "https://libraries.wsu.edu/wp-content/uploads/files/paul_brians/palouse/moscow/moscowwelcome.jpg", name: "Moscow", lat: 46.732389, long: -117.039748 },
       { url: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/Jewett_Observatory_01-04-15.jpg/1200px-Jewett_Observatory_01-04-15.jpg", name: "Jewett Observatory", lat: 46.728595, long: -117.153637 },
@@ -586,6 +586,7 @@
         const cartographic = Cesium.Cartographic.fromCartesian(cartesian);
         const lonDeg = Cesium.Math.toDegrees(cartographic.longitude);
         const latDeg = Cesium.Math.toDegrees(cartographic.latitude);
+        console.log("Clicked coords:", { lat: latDeg, long: lonDeg });
 
         handleClickLogic(lonDeg, latDeg);
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
