@@ -4,126 +4,11 @@
   <meta charset="UTF-8" />
   <title>HudelMaps 3D – Pullman Road Graph</title>
   <!-- CesiumJS CSS -->
+  <link href="styles.css" rel="stylesheet">
   <link
     href="https://cesium.com/downloads/cesiumjs/releases/1.120/Build/Cesium/Widgets/widgets.css"
     rel="stylesheet"
   />
-
-  <style>
-    /* basic page layout stuff */
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #020617;
-      color: #f9fafb;
-    }
-
-    #app {
-      display: flex;
-      height: 100vh;
-      width: 100vw;
-    }
-
-    #sidebar {
-      width: 280px;
-      padding: 14px 16px;
-      box-sizing: border-box;
-      border-right: 1px solid rgba(148, 163, 184, 0.35);
-      background: rgba(15, 23, 42, 0.72);
-      backdrop-filter: blur(10px);
-      z-index: 10;
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    #sidebar h1 {
-      margin: 0 0 4px;
-      font-size: 18px;
-      letter-spacing: 0.03em;
-    }
-
-    #sidebar p {
-      margin: 0;
-      font-size: 13px;
-      color: #cbd5f5;
-    }
-
-    #sidebar .metric {
-      font-size: 12px;
-      margin-top: 4px;
-      line-height: 1.4;
-      color: #e5e7eb;
-    }
-
-    #sidebar button {
-      width: 100%;
-      padding: 6px 8px;
-      margin-top: 6px;
-      font-size: 13px;
-      cursor: pointer;
-      border-radius: 6px;
-      border: 1px solid rgba(148, 163, 184, 0.7);
-      background: radial-gradient(circle at top left,
-        rgba(248, 250, 252, 0.12),
-        rgba(15, 23, 42, 0.9));
-      color: #f9fafb;
-      transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
-    }
-
-    #sidebar button:hover {
-      background: radial-gradient(circle at top left,
-        rgba(248, 250, 252, 0.18),
-        rgba(15, 23, 42, 0.95));
-      box-shadow: 0 0 12px rgba(248, 250, 252, 0.25);
-      transform: translateY(-1px);
-    }
-
-    #sidebar button:active {
-      transform: translateY(0);
-      box-shadow: none;
-    }
-
-    #metrics {
-      margin-top: 2px;
-      padding-top: 4px;
-      border-top: 1px solid rgba(148, 163, 184, 0.35);
-    }
-
-    .credit {
-      font-size: 10px;
-      color: #9ca3af;
-      margin-top: auto;
-      padding-top: 6px;
-      border-top: 1px solid rgba(148, 163, 184, 0.35);
-    }
-
-    #cesiumContainer {
-      flex: 1;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .cesium-viewer {
-      background: #020617;
-    }
-    .images img {
-      width: 100%;
-      object-fit: cover;
-      border-radius: 6px;
-      cursor: pointer;
-      margin: 6px;
-    }
-    .images {
-      overflow-y: auto;
-      flex: 1;
-      overflow-x: hidden;
-    }
-
-  </style>
 </head>
 <body>
   <div id="app">
@@ -189,11 +74,7 @@
     const startFromUserButton   = document.getElementById("startFromUserButton");
 
     // some rough constants to make the sidebar more informative
-    const WALK_SPEED_M_PER_SEC = 1.4; // average human walk speed.
-    const STEP_DELAY_MS = 3;          // delay for each Dijkstra "visit"
-    const EDGE_DELAY_MS = 1;          // delay for each edge relaxation
-
-    const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const walkSpeedOfNormalHumanBeing = 1.4; // average human walk speed.
 
     // Cesium viewer and graph data live in these globals.
     let viewerInstance;
@@ -221,9 +102,15 @@
     let userMarker = null;
     let userLongitude = null;
     let userLatitude = null;
-    let geoWatchId = null;
+    let usersLocation = null;
     let hasCenteredOnUser = false;
     let startPathFromUser = false;
+
+    const wait  = (ms) => {
+      return new Promise((resolve) => {
+        setTimeout(resolve, ms);
+      })
+    }
 
     // Set up viewer
     function setupCesiumViewer() {
@@ -282,14 +169,14 @@
     }
 
     function buildAdjacencyList(nodes, edges) {
-      const adj = new Map();
-      nodes.forEach(node => adj.set(node.id, []));
+      const adjacencyList= new Map();
+      nodes.forEach(node => adjacencyList.set(node.id, []));
       edges.forEach(edge => {
         const weight = edge.distanceMeters || edge.distance || 0;
-        adj.get(edge.from).push({ to: edge.to, weight });
-        adj.get(edge.to).push({ to: edge.from, weight });  // undirected graph
+        adjacencyList.get(edge.from).push({ to: edge.to, weight });
+        adjacencyList.get(edge.to).push({ to: edge.from, weight });  // undirected graph
       });
-      return adj;
+      return adjacencyList;
     }
 
     // Drawing roads and labels
@@ -297,9 +184,9 @@
       clearAllRoadPolylines();
 
       roadSegments = graphEdges.map(edge => {
-        const a = nodesById.get(edge.from);
-        const b = nodesById.get(edge.to);
-        if (!a || !b) {
+        const startingNode = nodesById.get(edge.from);
+        const endingNode = nodesById.get(edge.to);
+        if (!startingNode || !endingNode) {
           // if something is off in the JSON, just log it and skip the edge
           console.warn("Missing node for edge", edge);
           return null;
@@ -308,8 +195,8 @@
         return viewerInstance.entities.add({
           polyline: {
             positions: Cesium.Cartesian3.fromDegreesArray([
-              a.lng, a.lat,
-              b.lng, b.lat
+              startingNode.lng, startingNode.lat,
+              endingNode.lng, endingNode.lat
             ]),
             width: 4,
             // this is the general "graph skeleton" color
@@ -396,13 +283,13 @@
 
 
     function addExploredEdge(fromId, toId) {
-      const a = nodesById.get(fromId);
-      const b = nodesById.get(toId);
-      if (!a || !b) return;
+      const startingNode = nodesById.get(fromId);
+      const endingNode = nodesById.get(toId);
+      if (!startingNode || !endingNode) return;
 
       const explored = viewerInstance.entities.add({
-      polyline: {
-        positions: Cesium.Cartesian3.fromDegreesArray([a.lng, a.lat, b.lng, b.lat]),
+        polyline: {
+        positions: Cesium.Cartesian3.fromDegreesArray([startingNode.lng, startingNode.lat, endingNode.lng, endingNode.lat]),
         width: 6,
         material: Cesium.Color.fromCssColorString("#f97316").withAlpha(1.0),
         clampToGround: true
@@ -426,9 +313,9 @@
         let bestNode = null;
         let bestDist = Infinity;
         for (const nodeId of remaining) {
-          const d = distances.get(nodeId);
-          if (d < bestDist) {
-            bestDist = d;
+          const currentDistance = distances.get(nodeId);
+          if (currentDistance < bestDist) {
+            bestDist = currentDistance;
             bestNode = nodeId;
           }
         }
@@ -454,18 +341,18 @@
       }
 
       const path = [];
-      let cur = endId;
-      if (!previous.has(cur) && cur !== startId) {
+      let currentNode = endId;
+      if (!previous.has(currentNode) && currentNode !== startId) {
         // no path found
         return { path: [], distance: Infinity };
       }
 
-      while (cur !== undefined) {
-        path.unshift(cur);
-        if (cur === startId) {
+      while (currentNode !== undefined) {
+        path.unshift(currentNode);
+        if (currentNode === startId) {
           break;
         }
-        cur = previous.get(cur);
+        currentNode = previous.get(currentNode);
       }
 
       return { path, distance: distances.get(endId) };
@@ -490,9 +377,9 @@
         let bestNode = null;
         let bestDist = Infinity;
         for (const nodeId of remaining) {
-          const d = distances.get(nodeId);
-          if (d < bestDist) {
-            bestDist = d;
+          const currentDistance = distances.get(nodeId);
+          if (currentDistance < bestDist) {
+            bestDist = currentDistance;
             bestNode = nodeId;
           }
         }
@@ -504,9 +391,10 @@
 
         stepCounter += 1;
         showCurrentNodeMarker(bestNode);
-        statusText.textContent =
-          `Dijkstra step ${stepCounter}: visiting node ${bestNode} (dist ≈ ${bestDist.toFixed(1)} m)`;
-        await wait(STEP_DELAY_MS);
+        statusText.textContent = `Dijkstra step ${stepCounter}: visiting node ${bestNode} (dist ≈ ${bestDist.toFixed(1)} m)`;
+
+        // Waiting to show djikstras decision making
+        await wait(3);
 
         if (bestNode === endId) {
           break;
@@ -522,24 +410,25 @@
             previous.set(to, bestNode);
             // visually show that we found a "better" way to reach this neighbor
             addExploredEdge(bestNode, to);
-            await wait(EDGE_DELAY_MS);
+            // Delay to show dijkstra's decision process
+            await wait(1);
           }
         }
       }
 
       const path = [];
-      let cur = endId;
-      if (!previous.has(cur) && cur !== startId) {
+      let currentNode = endId;
+      if (!previous.has(currentNode) && currentNode !== startId) {
         dijkstraIsRunning = false;
         return { path: [], distance: Infinity };
       }
 
-      while (cur !== undefined) {
-        path.unshift(cur);
-        if (cur === startId) {
+      while (currentNode !== undefined) {
+        path.unshift(currentNode);
+        if (currentNode === startId) {
           break;
         }
-        cur = previous.get(cur);
+        currentNode = previous.get(currentNode);
       }
 
       const finalDistance = distances.get(endId);
@@ -581,7 +470,7 @@
       });
 
       // quick and dirty walking time estimate
-      const timeMinutes = (totalDistanceMeters / WALK_SPEED_M_PER_SEC) / 60 * 1.4;
+      const timeMinutes = (totalDistanceMeters / walkSpeedOfNormalHumanBeing) / 60 * 1.4;
       metricsPanel.innerHTML =
         `<strong>Path length:</strong> ${totalDistanceMeters.toFixed(1)} m<br>` +
         `<strong>Est. walk time:</strong> ${timeMinutes.toFixed(1)} min<br>` +
@@ -669,8 +558,7 @@
         endNodeId = null;
         clearExplorationVisuals();
         clearShortestPath();
-        statusText.textContent =
-          `Start node changed to ${startNodeId}. Click again to pick a new destination.`;
+        statusText.textContent = `Start node changed to ${startNodeId}. Click again to pick a new destination.`;
       }
     };
 
@@ -737,12 +625,12 @@
         }
 
         // clear any old watch
-        if (geoWatchId !== null) {
-          navigator.geolocation.clearWatch(geoWatchId);
-          geoWatchId = null;
+        if (usersLocation !== null) {
+          navigator.geolocation.clearWatch(usersLocation);
+          usersLocation = null;
         }
 
-        geoWatchId = navigator.geolocation.watchPosition(
+        usersLocation = navigator.geolocation.watchPosition(
           handleGeolocationSuccess,
           handleGeolocationError,
           {
@@ -823,14 +711,10 @@
       return bestId;
     }
 
+    // Cesium and loading the JSON
     (async function startApp() {
-      try {
         setupCesiumViewer();
         await loadGraphJson();
-      } catch (err) {
-        console.error("Error bootstrapping Cesium or the graph:", err);
-        statusText.textContent = "Error loading Cesium or graph data (see console).";
-      }
     })();
 
     const container = document.getElementById("imageContainer");
